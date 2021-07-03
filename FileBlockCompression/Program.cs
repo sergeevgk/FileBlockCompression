@@ -21,15 +21,15 @@ namespace FileBlockCompression
 
 			public CommandArgsInfo(string[] args) : this()
 			{
-				method = args[1];
-				inputFile = args[2];
-				outputFile = args[3];
+				method = args[0];
+				inputFile = args[1];
+				outputFile = args[2];
 			}
 		}
 
 		static CommandArgsInfo GetCommandLineArgs(string[] args)
 		{
-			if (args.Length < 4)
+			if (args.Length < 3)
 			{
 				throw new ArgumentException("Not enough command line arguments");
 			}
@@ -45,13 +45,14 @@ namespace FileBlockCompression
 			return info;
 		}
 
-
 		static void Main(string[] args)
 		{
 			try
 			{
 				var commandArgsInfo = GetCommandLineArgs(args);
-
+				IFileCompressor fileCompressor = new FileCompressor();
+				fileCompressor.Compress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
+				fileCompressor.Decompress(commandArgsInfo.outputFile, "decompr_" + commandArgsInfo.inputFile);
 				Console.WriteLine("Successfully compressed / decompressed");
 			}
 			catch (ArgumentException e)
