@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace FileBlockCompression
 {
-	internal interface IFileCompressor
+	public interface IFileCompressor
 	{
 		void Compress(string inputFileName, string outputFileName);
 		void Decompress(string inputFileName, string outputFileName);

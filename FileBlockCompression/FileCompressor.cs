@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace FileBlockCompression
 {
-	internal class FileCompressor : IFileCompressor
+	public class FileCompressor : IFileCompressor
 	{
 		public void Compress(string inputFileName, string outputFileName)
 		{
