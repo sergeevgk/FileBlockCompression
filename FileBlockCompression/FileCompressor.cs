@@ -38,6 +38,10 @@ namespace FileBlockCompression
 
 		public void Decompress(string inputFileName, string outputFileName)
 		{
+            if (Path.GetExtension(inputFileName) != ".gz")
+            {
+                throw new ArgumentException("Input file extension must be '.gz'");
+            }
             FileInfo fileToDecompress = new FileInfo(Path.GetFullPath(inputFileName));
             using (FileStream originalFileStream = fileToDecompress.OpenRead())
             {
