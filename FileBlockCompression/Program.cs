@@ -51,9 +51,17 @@ namespace FileBlockCompression
 			{
 				var commandArgsInfo = GetCommandLineArgs(args);
 				IFileCompressor fileCompressor = new FileCompressor();
-				fileCompressor.Compress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
-				fileCompressor.Decompress(commandArgsInfo.outputFile, "decompr_" + commandArgsInfo.inputFile);
-				Console.WriteLine("Successfully compressed / decompressed");
+				if (commandArgsInfo.method == "compress")
+				{
+					fileCompressor.Compress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
+				}
+				else
+				{
+					fileCompressor.Decompress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
+				}
+				//fileCompressor.Compress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
+				//fileCompressor.Decompress(commandArgsInfo.outputFile, "decompr_" + commandArgsInfo.inputFile);
+				Console.WriteLine($"Successfully {commandArgsInfo.method}ed");
 			}
 			catch (ArgumentException e)
 			{
