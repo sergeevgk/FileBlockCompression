@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO.Compression;
+using System.IO;
 
 namespace FileBlockCompression
 {
@@ -50,7 +51,11 @@ namespace FileBlockCompression
 			try
 			{
 				var commandArgsInfo = GetCommandLineArgs(args);
-				IFileCompressor fileCompressor = new FileCompressor();
+				IFileCompressor fileCompressor = new FileBlockCompressor();
+				if (File.Exists(commandArgsInfo.outputFile))
+				{
+					File.Delete(commandArgsInfo.outputFile);
+				}
 				if (commandArgsInfo.method == "compress")
 				{
 					fileCompressor.Compress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
@@ -68,6 +73,36 @@ namespace FileBlockCompression
 				Console.WriteLine(e.Message);
 				Console.WriteLine("Please provide command arguments as follows: " + commandArgsFormat);
 			}
+		}
+
+		static void Test()
+		{
+			var inputString = "“ ... ”";
+			byte[] compressed;
+			string output;
+
+			using (var outStream = new MemoryStream())
+			{
+				using (var tinyStream = new GZipStream(outStream, CompressionMode.Compress))
+				using (var mStream = new MemoryStream(Encoding.UTF8.GetBytes(inputString)))
+					mStream.CopyTo(tinyStream);
+
+				compressed = outStream.ToArray();
+			}
+
+			// “compressed” now contains the compressed string.
+			// Also, all the streams are closed and the above is a self-contained operation.
+
+			using (var inStream = new MemoryStream(compressed))
+			using (var bigStream = new GZipStream(inStream, CompressionMode.Decompress))
+			using (var bigStreamOut = new MemoryStream())
+			{
+				bigStream.CopyTo(bigStreamOut);
+				output = Encoding.UTF8.GetString(bigStreamOut.ToArray());
+			}
+
+			// “output” now contains the uncompressed string.
+			Console.WriteLine(output);
 		}
 	}
 }

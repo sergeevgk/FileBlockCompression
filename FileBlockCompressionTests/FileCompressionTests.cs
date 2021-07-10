@@ -10,7 +10,7 @@ namespace FileBlockCompressionTests
 	[TestClass]
 	public class FileCompressionTests
 	{
-		private string[] textInputFiles = { "test1", "test2" };
+		private string[] textInputFiles = { "test1", "test2", "a29" };
 		private string projectDirectory = Directory.GetParent(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)).Parent.FullName;
 
 		[TestMethod]
