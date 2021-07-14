@@ -64,8 +64,6 @@ namespace FileBlockCompression
 				{
 					fileCompressor.Decompress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
 				}
-				//fileCompressor.Compress(commandArgsInfo.inputFile, commandArgsInfo.outputFile);
-				//fileCompressor.Decompress(commandArgsInfo.outputFile, "decompr_" + commandArgsInfo.inputFile);
 				Console.WriteLine($"Successfully {commandArgsInfo.method}ed");
 			}
 			catch (ArgumentException e)

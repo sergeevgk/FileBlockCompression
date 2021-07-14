@@ -18,8 +18,8 @@ namespace FileBlockCompression
 
 		ManualResetEvent[] resetEvents;
 
-		private ConcurrentDictionary<int, byte[]> streamsToProcess = new ConcurrentDictionary<int, byte[]>();
-		private ConcurrentDictionary<int, byte[]> streamsProcessed = new ConcurrentDictionary<int, byte[]>();
+		private readonly ConcurrentDictionary<int, byte[]> byteArraysToProcess = new ConcurrentDictionary<int, byte[]>();
+		private readonly ConcurrentDictionary<int, byte[]> byteArraysProcessed = new ConcurrentDictionary<int, byte[]>();
 		
 		/// <summary>
 		/// 
@@ -34,6 +34,7 @@ namespace FileBlockCompression
 		}
 
 		#region compress
+
 		public void Compress(string inputFileName, string outputFileName)
 		{
 			if (Path.GetExtension(outputFileName) != ".gz")
@@ -41,9 +42,9 @@ namespace FileBlockCompression
 				throw new ArgumentException("Output file extension must be '.gz'");
 			}
 			var fileToCompress = new FileInfo(Path.GetFullPath(inputFileName));
-			var fileCompressed = new FileInfo(Path.GetFullPath(outputFileName));
 			using (var streamToCompress = fileToCompress.OpenRead())
 			{
+				var fileCompressed = new FileInfo(Path.GetFullPath(outputFileName));
 				using (var streamCompressed = fileCompressed.OpenWrite())
 				{
 					var sizeInBytes = fileToCompress.Length;
@@ -57,7 +58,11 @@ namespace FileBlockCompression
 				}
 			}
 		}
-
+		/// <summary>
+		/// Determines chunk size to read passed file stream
+		/// </summary>
+		/// <param name="stream"></param>
+		/// <returns>Chunk size in bytes</returns>
 		private int GetChunkSize(FileStream stream)
 		{
 			long totalBytesToRead = stream.Length;
@@ -73,55 +78,68 @@ namespace FileBlockCompression
 			return chunkSize;
 		}
 
-		private int CompressBlock(FileStream streamToCompress, FileStream streamCompressed, int chunkSize)
+		private int CompressBlock(FileStream streamToProcess, FileStream streamProcessed, int chunkSize)
+		{
+			try
+			{
+				int blockSize = ReadBlockToCompress(streamToProcess, chunkSize, out var realThreadsCount);
+
+				resetEvents = new ManualResetEvent[realThreadsCount];
+				for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
+				{
+					resetEvents[threadIdx] = new ManualResetEvent(false);
+				}
+
+				for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
+				{
+					if (byteArraysToProcess.TryRemove(threadIdx, out var bytes))
+					{
+						var tid = threadIdx;
+						Thread t = new Thread(() => CompressAndStashChunk(bytes, tid));
+						t.Start();
+					}
+				}
+				WaitHandle.WaitAll(resetEvents);
+
+
+				for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
+				{
+					if (byteArraysProcessed.TryRemove(threadIdx, out var chunkCompressed))
+					{
+						streamProcessed.Write(BitConverter.GetBytes(chunkCompressed.Length), 0, 4);
+						streamProcessed.Write(chunkCompressed, 0, chunkCompressed.Length);
+					}
+				}
+				return blockSize;
+			}
+			catch (IOException e)
+			{
+				Console.WriteLine("Error occured on reading input file. " + e.Message);
+				throw;
+			}
+		}
+
+		private int ReadBlockToCompress(FileStream streamToProcess, int chunkSize, out int realThreadsCount)
 		{
 			int blockSize = 0;
 			for (int threadIdx = 0; threadIdx < numThreads; threadIdx++)
 			{
 				byte[] buffer = new byte[chunkSize];
-				var bytesReadCount = streamToCompress.Read(buffer, 0, chunkSize);
+				var bytesReadCount = streamToProcess.Read(buffer, 0, chunkSize);
 				if (bytesReadCount == 0)
 				{
 					break;
 				}
 				if (bytesReadCount != chunkSize)
 				{
-					Array.Resize<byte>(ref buffer, bytesReadCount);
+					Array.Resize(ref buffer, bytesReadCount);
 				}
 				blockSize += bytesReadCount;
-				var stream = new MemoryStream(buffer);
-				streamsToProcess.TryAdd(threadIdx, buffer);
+				byteArraysToProcess.TryAdd(threadIdx, buffer);
 			}
-			int realThreadsCount = streamsToProcess.Count;
+			realThreadsCount = byteArraysToProcess.Count;
 			if (realThreadsCount == 0)
 				return 0;
-
-			resetEvents = new ManualResetEvent[realThreadsCount];
-			for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
-			{
-				resetEvents[threadIdx] = new ManualResetEvent(false);
-			}
-
-			for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
-			{
-				if (streamsToProcess.TryRemove(threadIdx, out var bytes))
-				{
-					var tid = threadIdx;
-					Thread t = new Thread(() => CompressAndStashChunk(bytes, tid));
-					t.Start();
-				}
-			}
-			WaitHandle.WaitAll(resetEvents);
-
-
-			for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
-			{
-				if (streamsProcessed.TryRemove(threadIdx, out var chunkCompressed))
-				{
-					streamCompressed.Write(BitConverter.GetBytes(chunkCompressed.Length), 0, 4);
-					streamCompressed.Write(chunkCompressed, 0, chunkCompressed.Length);
-				}
-			}
 			return blockSize;
 		}
 
@@ -134,11 +152,13 @@ namespace FileBlockCompression
 				{
 					mStream.CopyTo(compressionStream);
 				}
-				streamsProcessed.TryAdd(threadIdx, outStream.ToArray());
+				byteArraysProcessed.TryAdd(threadIdx, outStream.ToArray());
 			}
 			resetEvents[threadIdx].Set();
 		}
 		#endregion
+		
+		#region decompress
 
 		public void Decompress(string inputFileName, string outputFileName)
 		{
@@ -147,13 +167,11 @@ namespace FileBlockCompression
 				throw new ArgumentException("Input file extension must be '.gz'");
 			}
 			var fileToProcess = new FileInfo(Path.GetFullPath(inputFileName));
-			var fileProcessed = new FileInfo(Path.GetFullPath(outputFileName));
 			using (var streamToProcess = fileToProcess.OpenRead())
 			{
+				var fileProcessed = new FileInfo(Path.GetFullPath(outputFileName));
 				using (var streamProcessed = fileProcessed.OpenWrite())
 				{
-					var sizeInBytes = fileToProcess.Length;
-
 					while (true)
 					{
 						var blockSize = DecompressBlock(streamToProcess, streamProcessed);
@@ -169,27 +187,10 @@ namespace FileBlockCompression
 
 		private int DecompressBlock(FileStream streamToProcess, FileStream streamProcessed)
 		{
-			var currentPosition = streamToProcess.Position;
-			int blockSize = 0;
 			try
 			{
-				byte[] chunkSizeBuffer = new byte[4];
-				for (int threadIdx = 0; threadIdx < numThreads; threadIdx++)
-				{
-					if (streamToProcess.Read(chunkSizeBuffer, 0, 4) == 0)
-					{
-						break;
-					}
-					int chunkSize = BitConverter.ToInt32(chunkSizeBuffer, 0);
-					blockSize += chunkSize;
-
-					byte[] dataBuffer = new byte[chunkSize];
-					streamToProcess.Read(dataBuffer, 0, chunkSize);
-					streamsToProcess.TryAdd(threadIdx, dataBuffer);
-				}
-				int realThreadsCount = streamsToProcess.Count;
-				if (realThreadsCount == 0)
-					return 0;
+				var currentPosition = streamToProcess.Position;
+				int blockSize = ReadBlockToDecompress(streamToProcess, out var realThreadsCount);
 
 				resetEvents = new ManualResetEvent[realThreadsCount];
 				for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
@@ -199,7 +200,7 @@ namespace FileBlockCompression
 
 				for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
 				{
-					if (streamsToProcess.TryRemove(threadIdx, out var bytes))
+					if (byteArraysToProcess.TryRemove(threadIdx, out var bytes))
 					{
 						var tid = threadIdx;
 						Thread t = new Thread(() => DecompressAndStashChunk(bytes, tid));
@@ -208,22 +209,45 @@ namespace FileBlockCompression
 				}
 				WaitHandle.WaitAll(resetEvents);
 
-
 				for (int threadIdx = 0; threadIdx < realThreadsCount; threadIdx++)
 				{
-					if (streamsProcessed.TryRemove(threadIdx, out var chunkDecompressed))
+					if (byteArraysProcessed.TryRemove(threadIdx, out var chunkDecompressed))
 					{
 						streamProcessed.Write(chunkDecompressed, 0, chunkDecompressed.Length);
 					}
 				}
+				return blockSize;
 			}
 			catch (IOException e)
 			{
 				Console.WriteLine("Error occured on reading input file. " + e.Message);
 				throw;
 			}
+		}
+
+		private int ReadBlockToDecompress(FileStream streamToProcess, out int realThreadsCount)
+		{
+			int blockSize = 0;
+			byte[] chunkSizeBuffer = new byte[4];
+			for (int threadIdx = 0; threadIdx < numThreads; threadIdx++)
+			{
+				if (streamToProcess.Read(chunkSizeBuffer, 0, 4) == 0)
+				{
+					break;
+				}
+				int chunkSize = BitConverter.ToInt32(chunkSizeBuffer, 0);
+				blockSize += chunkSize;
+
+				byte[] dataBuffer = new byte[chunkSize];
+				streamToProcess.Read(dataBuffer, 0, chunkSize);
+				byteArraysToProcess.TryAdd(threadIdx, dataBuffer);
+			}
+			realThreadsCount = byteArraysToProcess.Count;
+			if (realThreadsCount == 0)
+				return 0;
 			return blockSize;
 		}
+
 		private void DecompressAndStashChunk(byte[] chunk, int threadIdx)
 		{
 			using (MemoryStream temp = new MemoryStream(chunk))
@@ -231,10 +255,10 @@ namespace FileBlockCompression
 			using (MemoryStream outStream = new MemoryStream())
 			{
 				decompressingStream.CopyTo(outStream);
-				streamsProcessed.TryAdd(threadIdx, outStream.ToArray());
+				byteArraysProcessed.TryAdd(threadIdx, outStream.ToArray());
 			}
 			resetEvents[threadIdx].Set();
 		}
-
+		#endregion
 	}
 }
