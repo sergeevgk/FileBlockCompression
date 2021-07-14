@@ -12,14 +12,26 @@ namespace FileBlockCompression
 {
 	class FileBlockCompressor : IFileCompressor
 	{
-		const int numThreads = 2;
-		const int threadMaxBufferSizeInBytes = 1 << 21; // 1 << 21 == 1 Mb
-		const int maxBufferSizeInBytes = threadMaxBufferSizeInBytes * numThreads;
+		private readonly int numThreads;
+		private readonly int threadMaxBufferSizeInBytes;
+		private readonly int maxBufferSizeInBytes;
 
 		ManualResetEvent[] resetEvents;
 
 		private ConcurrentDictionary<int, byte[]> streamsToProcess = new ConcurrentDictionary<int, byte[]>();
 		private ConcurrentDictionary<int, byte[]> streamsProcessed = new ConcurrentDictionary<int, byte[]>();
+		
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="numThreads">Number of threads</param>
+		/// <param name="maxThreadBufferSize"> Max thread buffer size in bytes for reading file</param>
+		public FileBlockCompressor(int numThreads, int maxThreadBufferSize)
+		{
+			this.numThreads = numThreads;
+			threadMaxBufferSizeInBytes = maxThreadBufferSize;
+			maxBufferSizeInBytes = maxThreadBufferSize * numThreads;
+		}
 
 		#region compress
 		public void Compress(string inputFileName, string outputFileName)

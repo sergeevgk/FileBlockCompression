@@ -51,7 +51,7 @@ namespace FileBlockCompression
 			try
 			{
 				var commandArgsInfo = GetCommandLineArgs(args);
-				IFileCompressor fileCompressor = new FileBlockCompressor();
+				IFileCompressor fileCompressor = new FileBlockCompressor(2, 1 << 21);
 				if (File.Exists(commandArgsInfo.outputFile))
 				{
 					File.Delete(commandArgsInfo.outputFile);
