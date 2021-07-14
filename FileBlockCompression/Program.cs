@@ -72,35 +72,5 @@ namespace FileBlockCompression
 				Console.WriteLine("Please provide command arguments as follows: " + commandArgsFormat);
 			}
 		}
-
-		static void Test()
-		{
-			var inputString = "“ ... ”";
-			byte[] compressed;
-			string output;
-
-			using (var outStream = new MemoryStream())
-			{
-				using (var tinyStream = new GZipStream(outStream, CompressionMode.Compress))
-				using (var mStream = new MemoryStream(Encoding.UTF8.GetBytes(inputString)))
-					mStream.CopyTo(tinyStream);
-
-				compressed = outStream.ToArray();
-			}
-
-			// “compressed” now contains the compressed string.
-			// Also, all the streams are closed and the above is a self-contained operation.
-
-			using (var inStream = new MemoryStream(compressed))
-			using (var bigStream = new GZipStream(inStream, CompressionMode.Decompress))
-			using (var bigStreamOut = new MemoryStream())
-			{
-				bigStream.CopyTo(bigStreamOut);
-				output = Encoding.UTF8.GetString(bigStreamOut.ToArray());
-			}
-
-			// “output” now contains the uncompressed string.
-			Console.WriteLine(output);
-		}
 	}
 }
